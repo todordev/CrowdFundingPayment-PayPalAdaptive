@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension version="3.3" type="plugin" group="crowdfundingpayment" method="upgrade">
+    <name>PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE</name>
+    <author>Todor Iliev</author>
+    <copyright>Copyright (C) 2014 Todor Iliev ( ITPrism.com ). All rights reserved.</copyright>
+    <license>http://www.gnu.org/copyleft/gpl.html GNU/GPL</license>
+    <authorEmail>todor@itprism.com</authorEmail>
+    <authorUrl>http://itprism.com</authorUrl>
+    <version>1.0</version>
+    <creationDate>16 November, 2014</creationDate>
+    <description><![CDATA[
+    <p>CrowdFunding Payment - PayPal Adaptive is a plugin that provides ability for making payments via PayPal Adaptive method.</p>
+    <p>Invest in the extension and help for its improvement. You can <a href="http://itprism.com/sponsorship" target="_blank">sponsor the extension via SMS, PayPal or Bitcoin</a>.</p>
+    <p><a href='http://itprism.com/' target='_blank'>Subscribe for the newsletter</a> to receive information about updates and new ITPrism extensions.</p>
+    <p>Please, <a href='http://extensions.joomla.org/extensions/e-commerce/donations/23876' target='_blank'>vote for the extension</a> on Joomla! Extensions Directory</p>
+    ]]></description>
+    
+    <help url="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_HELP_URL"/>
+    
+    <files>
+        <filename plugin="paypaladaptive">paypaladaptive.php</filename>
+        <filename>index.html</filename>
+        
+        <folder>images</folder>
+        <folder>language</folder>
+    </files>
+    
+    <config>
+		<fields name="params"  addfieldpath="/administrator/components/com_crowdfunding/models/fields">
+			<fieldset name="basic">
+                <field name="paypal_receiver_email" type="text"  label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_RECEIVER_EMAIL" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_RECEIVER_EMAIL_DESC" class="input-xxlarge" />
+                <field name="paypal_app_id" type="text"  label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_APP_ID" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_APP_ID_DESC" class="input-xxlarge" />
+                <field name="paypal_api_username" type="text" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_API_USERNAME" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_API_USERNAME_DESC" class="input-xxlarge" />
+                <field name="paypal_api_password" type="text" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_API_PASSWORD" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_API_PASSWORD_DESC" />
+                <field name="paypal_api_signature" type="text" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_API_SIGNATURE" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_API_SIGNATURE_DESC"  class="input-xxlarge"/>
+                <field name="paypal_country" type="cfcountries" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_COUNTRY" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_COUNTRY_DESC" required="true" />
+            </fieldset>
+            <fieldset name="sandbox" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX">
+                <field name="paypal_sandbox" type="radio" default="1" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_ENABLE_SANDBOX" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX_DESC" class="btn-group">
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+                <field name="paypal_sandbox_receiver_email" type="text"  label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_RECEIVER_EMAIL" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_RECEIVER_EMAIL_DESC" class="input-xxlarge" />
+                <field name="paypal_sandbox_app_id" type="text" default="APP-80W284485P519543T" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX_APP_ID" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX_APP_ID_DESC" class="input-large" />
+                <field name="paypal_sandbox_api_username" type="text" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX_API_USERNAME" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX_API_USERNAME_DESC" class="input-xxlarge" />
+                <field name="paypal_sandbox_api_password" type="text" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX_API_PASSWORD" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX_API_PASSWORD_DESC" />
+                <field name="paypal_sandbox_api_signature" type="text" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX_API_SIGNATURE" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX_API_SIGNATURE_DESC"  class="input-xxlarge"/>
+                <field name="paypal_sandbox_url" type="text" default="https://www.sandbox.paypal.com/cgi-bin/webscr" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX_URL" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX_URL_DESC" class="input-xxlarge" />
+                <field name="paypal_sandbox_api_url" type="text" default="https://svcs.sandbox.paypal.com/AdaptivePayments/" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX_API_URL" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SANDBOX_API_URL_DESC"  class="input-xxlarge" />
+            </fieldset>
+            
+            <fieldset name="emails" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_NOTIFICATION_EMAILS">
+                <field name="admin_mail_id" type="cfemails" default="0" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SEND_MAIL_ADMIN" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SEND_MAIL_ADMIN_DESC" class="btn-group" />
+                <field name="creator_mail_id" type="cfemails" default="0" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SEND_MAIL_CREATOR" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SEND_MAIL_CREATOR_DESC" class="btn-group" />
+                <field name="user_mail_id" type="cfemails" default="0" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SEND_MAIL_USER" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SEND_MAIL_USER_DESC" class="btn-group" />
+                
+                <field name="email_mode" type="list" default="html" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_EMAIL_MODE" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_EMAIL_MODE_DESC" >
+                   <option value="plain">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_PLAIN</option>
+                   <option value="html">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_HTML</option>
+                </field>
+            </fieldset>
+            
+            <fieldset name="advanced" >
+                <field name="paypal_url" type="text" default="https://www.paypal.com/cgi-bin/webscr" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_PRODUCTION_URL" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_PRODUCTION_URL_DESC"  class="input-xxlarge" />
+                <field name="paypal_api_url" type="text" default="https://svcs.paypal.com/AdaptivePayments/" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_PRODUCTION_API_URL" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_PRODUCTION_API_URL_DESC"  class="input-xxlarge" />
+                <field name="paypal_return_url" type="text" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_RETURN_URL" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_RETURN_URL_DESC"  class="input-xxlarge" />
+                <field name="paypal_cancel_url" type="text" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_CANCEL_URL" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_CANCEL_URL_DESC"  class="input-xxlarge" />
+                <field name="paypal_notify_url" type="text" default="index.php?option=com_crowdfunding&amp;task=notifier.notify&amp;format=raw&amp;payment_service=PayPal" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_NOTIFY_URL" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_NOTIFY_URL_DESC"  class="input-xxlarge" />
+                <field name="paypal_button_default" type="radio" default="0" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_DEFAULT_BUTTON" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_DEFAULT_BUTTON_DESC" class="btn-group">
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+                <field name="paypal_button_type" type="list" default="html" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_BUTTON_TYPE" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_BUTTON_TYPE_DESC" >
+                   <option value="btn_buynow_LG">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_BUY_NOW</option>
+                   <option value="btn_buynowCC_LG">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_BUY_NOW_CC</option>
+                   <option value="btn_paynow_LG">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_PAY_NOW</option>
+                   <option value="btn_paynowCC_LG">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_PAY_NOW_CC</option>
+                   <option value="btn_donate_LG">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_DONATE</option>
+                   <option value="btn_donateCC_LG">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_DONATE_CC</option>
+                </field>
+                <field name="paypal_button_url" type="text" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_BUTTON_URL" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_BUTTON_URL_DESC" class="input-xxlarge"  />
+                <field name="paypal_load_certificate" type="radio" default="0" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_LOAD_CERTIFICATE" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_LOAD_CERTIFICATE_DESC" class="btn-group">
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+
+                <field name="paypal_starting_date" type="list" default="0" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_STARTING_DATE" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_STARTING_DATE_DESC">
+                    <option value="0">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_REGISTRATION_DATE</option>
+                    <option value="1">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_CAMPAIGN_END_DATE</option>
+                </field>
+                <field name="paypal_payment_type" type="list" default="simple" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_PAYMENT_TYPE" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_PAYMENT_TYPE_DESC">
+                    <option value="simple">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SIMPLE</option>
+                    <option value="parallel">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_PARALLEL</option>
+                    <option value="chained">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_CHAINED</option>
+                </field>
+                <field name="paypal_fees_payer" type="list" default="EACHRECEIVER" label="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_FEES_PAYER" description="PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_FEES_PAYER_DESC">
+                    <option value="EACHRECEIVER">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_EACH_RECEIVER</option>
+                    <option value="PRIMARYRECEIVER">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_PRIMARY_RECEIVER</option>
+                    <option value="SECONDARYONLY">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SECONDARY_ONLY</option>
+                    <option value="SENDER">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SENDER</option>
+                </field>
+			</fieldset>
+	            
+        </fields>
+	</config>
+</extension>
