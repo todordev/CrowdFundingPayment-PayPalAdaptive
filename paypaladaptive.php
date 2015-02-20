@@ -3,7 +3,7 @@
  * @package      CrowdFunding
  * @subpackage   Plugins
  * @author       Todor Iliev
- * @copyright    Copyright (C) 2014 Todor Iliev <todor@itprism.com>. All rights reserved.
+ * @copyright    Copyright (C) 2015 Todor Iliev <todor@itprism.com>. All rights reserved.
  * @license      http://www.gnu.org/copyleft/gpl.html GNU/GPL
  */
 
@@ -22,8 +22,13 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
 {
     protected $paymentService = "paypal";
 
-    protected $textPrefix = "PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE";
-    protected $debugType = "PAYMENT_PLUGIN_DEBUG_PAYPALADAPTIVE";
+    protected $textPrefix     = "PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE";
+    protected $debugType      = "PAYMENT_PLUGIN_DEBUG_PAYPALADAPTIVE";
+
+    /**
+     * @var JApplicationSite
+     */
+    protected $app;
 
     protected $envelope = array(
         "errorLanguage" => "en_US",
@@ -46,10 +51,7 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
             return null;
         }
 
-        $app = JFactory::getApplication();
-        /** @var $app JApplicationSite */
-
-        if ($app->isAdmin()) {
+        if ($this->app->isAdmin()) {
             return null;
         }
 
@@ -66,6 +68,8 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
         $pluginURI = "plugins/crowdfundingpayment/paypalexpress";
 
         $html   = array();
+        $html[] = '<div class="well">'; // Open "well".
+
         $html[] = '<h4><img src="' . $pluginURI . '/images/paypal_icon.png" width="36" height="32" alt="PayPal" />' . JText::_($this->textPrefix . "_TITLE") . '</h4>';
         $html[] = '<p>' . JText::_($this->textPrefix . "_INFO") . '</p>';
         $html[] = '<div class="clearfix"> </div>';
@@ -82,8 +86,10 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
         $html[] = '</form>';
 
         if ($this->params->get('paypal_sandbox', 1)) {
-            $html[] = '<p class="sticky">' . JText::_($this->textPrefix . "_WORKS_SANDBOX") . '</p>';
+            $html[] = '<div class="alert alert-info"><i class="icon-info-sign"></i> ' . JText::_($this->textPrefix . "_WORKS_SANDBOX") . '</div>';
         }
+
+        $html[] = '</div>'; // Close "well".
 
         return implode("\n", $html);
     }
@@ -103,10 +109,7 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
             return null;
         }
 
-        $app = JFactory::getApplication();
-        /** @var $app JApplicationSite */
-
-        if ($app->isAdmin()) {
+        if ($this->app->isAdmin()) {
             return null;
         }
 
@@ -121,13 +124,14 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
 
         $output = array();
 
-        $notifyUrl = $this->getNotifyUrl($item->slug, $item->catslug);
+        $notifyUrl = $this->getCallbackUrl();
         $cancelUrl = $this->getCancelUrl($item->slug, $item->catslug);
         $returnUrl = $this->getReturnUrl($item->slug, $item->catslug);
 
         // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_CANCEL_URL"), $this->debugType, $cancelUrl) : null;
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_NOTIFY_URL"), $this->debugType, $notifyUrl) : null;
         JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_RETURN_URL"), $this->debugType, $returnUrl) : null;
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_CANCEL_URL"), $this->debugType, $cancelUrl) : null;
 
         // Get country and locale code.
         jimport("crowdfunding.country");
@@ -154,7 +158,7 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
         $this->prepareCredentials($options);
 
         // Get server IP address.
-        /*$serverIP = $app->input->server->get("SERVER_ADDR");
+        /*$serverIP = $this->app->input->server->get("SERVER_ADDR");
         $options->set("credentials.ip_address", $serverIP);*/
 
         // Prepare starting and ending date.
@@ -176,7 +180,7 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
         $options->set("payment.max_amount", $item->amount);
         $options->set("payment.max_total_amount", $item->amount);
         $options->set("payment.number_of_payments", 1);
-        $options->set("payment.currency_code", $item->currency);
+        $options->set("payment.currency_code", $item->currencyCode);
 
         $options->set("payment.fees_payer", $this->params->get("paypal_fees_payer"));
         $options->set("payment.ping_type", "NOT_REQUIRED");
@@ -188,7 +192,7 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
 
         // Get intention.
         $userId  = JFactory::getUser()->get("id");
-        $aUserId = $app->getUserState("auser_id");
+        $aUserId = $this->app->getUserState("auser_id");
 
         $intention = $this->getIntention(array(
             "user_id"    => $userId,
@@ -203,10 +207,10 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
         JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_PAYPAL_ADAPTIVE_OPTIONS"), $this->debugType, $options->toArray()) : null;
 
         jimport("itprism.payment.paypal.adaptive");
-        $express = new ITPrismPayPalAdaptive($apiUrl, $options);
-        $express->setTransport($http);
+        $adaptive = new ITPrismPayPalAdaptive($apiUrl, $options);
+        $adaptive->setTransport($http);
 
-        $response = $express->doPreppproval();
+        $response = $adaptive->doPreppproval();
 
         // DEBUG DATA
         JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_PAYPAL_ADAPTIVE_RESPONSE"), $this->debugType, $response) : null;
@@ -246,10 +250,7 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
             return null;
         }
 
-        $app = JFactory::getApplication();
-        /** @var $app JApplicationAdministrator */
-
-        if (!$app->isAdmin()) {
+        if (!$this->app->isAdmin()) {
             return null;
         }
 
@@ -284,13 +285,13 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
         $options = new JRegistry;
         /** @var  $options Joomla\Registry\Registry */
 
+        $notifyUrl = $this->getCallbackUrl();
         $cancelUrl = $this->getCancelUrl($project->getSlug(), $project->getCatSlug());
         $returnUrl = $this->getReturnUrl($project->getSlug(), $project->getCatSlug());
-        $notifyUrl = $this->getNotifyUrl($project->getSlug(), $project->getCatSlug());
 
+        $options->set("urls.notify", $notifyUrl);
         $options->set("urls.cancel", $cancelUrl);
         $options->set("urls.return", $returnUrl);
-        $options->set("urls.notify", $notifyUrl);
 
         $this->prepareCredentials($options);
 
@@ -299,7 +300,6 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
 
         $options->set("payment.fees_payer", $this->params->get("paypal_fees_payer"));
         $options->set("payment.currency_code", $item->txn_currency);
-
 
         $options->set("request.envelope", $this->envelope);
 
@@ -384,10 +384,7 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
             return null;
         }
 
-        $app = JFactory::getApplication();
-        /** @var $app JApplicationAdministrator */
-
-        if (!$app->isAdmin()) {
+        if (!$this->app->isAdmin()) {
             return null;
         }
 
@@ -485,10 +482,7 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
             return null;
         }
 
-        $app = JFactory::getApplication();
-        /** @var $app JApplicationSite */
-
-        if ($app->isAdmin()) {
+        if ($this->app->isAdmin()) {
             return null;
         }
 
@@ -502,7 +496,7 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
         }
 
         // Validate request method
-        $requestMethod = $app->input->getMethod();
+        $requestMethod = $this->app->input->getMethod();
         if (strcmp("POST", $requestMethod) != 0) {
             $this->log->add(
                 JText::_($this->textPrefix . "_ERROR_INVALID_REQUEST_METHOD"),
@@ -528,7 +522,7 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
             "reward"          => null,
             "transaction"     => null,
             "payment_session" => null,
-            "payment_service" => "PayPal"
+            "payment_service" => $this->paymentService
         );
 
         switch ($_POST["transaction_type"]) {
@@ -734,25 +728,7 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
             unset($rawPostTransaction);
             unset($rawPost);
 
-            // Get currency
-//            jimport("crowdfunding.currency");
-//            $currencyId = $params->get("project_currency");
-//            $currency   = CrowdFundingCurrency::getInstance(JFactory::getDbo(), $currencyId, $params);
-
             $preApprovalKey = JArrayHelper::getValue($_POST, "preapproval_key");
-
-            // Get intention data
-            /*$keys = array(
-                "unique_key" => $preApprovalKey
-            );
-
-            jimport("crowdfunding.payment.session");
-            $intention = new CrowdFundingPaymentSession(JFactory::getDbo());
-            $intention->load($keys);
-
-            // DEBUG DATA
-            JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_INTENTION"), $this->debugType, $intention->getProperties()) : null;
-            */
 
             // Validate transaction data
             $this->updateTransactionDataOnPay($_POST, $preApprovalKey);
@@ -789,10 +765,7 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
             return;
         }
 
-        $app = JFactory::getApplication();
-        /** @var $app JApplicationSite */
-
-        if ($app->isAdmin()) {
+        if ($this->app->isAdmin()) {
             return;
         }
 
@@ -868,32 +841,6 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
             return null;
         }
 
-
-        // Check receiver
-        /*$allowedReceivers = array(
-            JString::strtolower(JArrayHelper::getValue($data, "business")),
-            JString::strtolower(JArrayHelper::getValue($data, "receiver_email")),
-            JString::strtolower(JArrayHelper::getValue($data, "receiver_id"))
-        );
-
-        if ($this->params->get("paypal_sandbox", 0)) {
-            $receiver = JString::strtolower(JString::trim($this->params->get("paypal_sandbox_business_name")));
-        } else {
-            $receiver = JString::strtolower(JString::trim($this->params->get("paypal_business_name")));
-        }
-
-        if (!in_array($receiver, $allowedReceivers)) {
-
-            // Log data in the database
-            $this->log->add(
-                JText::_($this->textPrefix . "_ERROR_INVALID_RECEIVER"),
-                $this->debugType,
-                array("TRANSACTION DATA" => $data, "RECEIVER DATA" => $allowedReceivers)
-            );
-
-            return null;
-        }*/
-
         return $transaction;
     }
 
@@ -908,33 +855,6 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
      */
     protected function updateTransactionDataOnPay($data, $preApprovalKey)
     {
-
-        // Check receiver
-        /*$allowedReceivers = array(
-            JString::strtolower(JArrayHelper::getValue($data, "business")),
-            JString::strtolower(JArrayHelper::getValue($data, "receiver_email")),
-            JString::strtolower(JArrayHelper::getValue($data, "receiver_id"))
-        );
-
-        if ($this->params->get("paypal_sandbox", 0)) {
-            $receiver = JString::strtolower(JString::trim($this->params->get("paypal_sandbox_business_name")));
-        } else {
-            $receiver = JString::strtolower(JString::trim($this->params->get("paypal_business_name")));
-        }
-
-        if (!in_array($receiver, $allowedReceivers)) {
-
-            // Log data in the database
-            $this->log->add(
-                JText::_($this->textPrefix . "_ERROR_INVALID_RECEIVER"),
-                $this->debugType,
-                array("TRANSACTION DATA" => $data, "RECEIVER DATA" => $allowedReceivers)
-            );
-
-            return null;
-        }*/
-
-
         // Get transaction by ID
         $keys = array(
             "txn_id" => $preApprovalKey
@@ -1135,55 +1055,6 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
         $transaction->load($keys);
 
         return $transaction;
-    }
-
-    protected function getNotifyUrl()
-    {
-        $page = JString::trim($this->params->get('paypal_notify_url'));
-
-        $uri    = JUri::getInstance();
-        $domain = $uri->toString(array("host"));
-
-        if (false == strpos($page, $domain)) {
-            $page = JURI::root() . $page;
-        }
-
-        if (false === strpos($page, "payment_service=PayPal")) {
-            $page .= "&payment_service=PayPal";
-        }
-
-        // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_NOTIFY_URL"), $this->debugType, $page) : null;
-
-        return $page;
-    }
-
-    protected function getReturnUrl($slug, $catslug)
-    {
-        $page = JString::trim($this->params->get('paypal_return_url'));
-        if (!$page) {
-            $uri  = JUri::getInstance();
-            $page = $uri->toString(array("scheme", "host")) . JRoute::_(CrowdFundingHelperRoute::getBackingRoute($slug, $catslug, "share"), false);
-        }
-
-        // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_RETURN_URL"), $this->debugType, $page) : null;
-
-        return $page;
-    }
-
-    protected function getCancelUrl($slug, $catslug)
-    {
-        $page = JString::trim($this->params->get('paypal_cancel_url'));
-        if (!$page) {
-            $uri  = JURI::getInstance();
-            $page = $uri->toString(array("scheme", "host")) . JRoute::_(CrowdFundingHelperRoute::getBackingRoute($slug, $catslug, "default"), false);
-        }
-
-        // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix . "_DEBUG_CANCEL_URL"), $this->debugType, $page) : null;
-
-        return $page;
     }
 
     protected function prepareLocale(&$html)
@@ -1487,7 +1358,7 @@ class plgCrowdFundingPaymentPayPalAdaptive extends CrowdFundingPaymentPlugin
                             "primary" => false
                         );
 
-                    break;
+                        break;
 
                 }
 
