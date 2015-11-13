@@ -1,6 +1,6 @@
 CrowdfundingPayment-PayPal Adaptive
 ==================================
-( Version 2.0 )
+( Version 2.1 )
 - - -
 
 This is a payment plugin that provides functionality for making payments via PayPal Adaptive.
