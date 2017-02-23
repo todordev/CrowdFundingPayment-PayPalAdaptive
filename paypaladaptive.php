@@ -3,17 +3,28 @@
  * @package      Crowdfunding
  * @subpackage   Plugins
  * @author       Todor Iliev
- * @copyright    Copyright (C) 2015 Todor Iliev <todor@itprism.com>. All rights reserved.
+ * @copyright    Copyright (C) 2017 Todor Iliev <todor@itprism.com>. All rights reserved.
  * @license      GNU General Public License version 3 or later; see LICENSE.txt
  */
 
 // no direct access
 defined('_JEXEC') or die;
 
+use Joomla\Utilities\ArrayHelper;
+use Joomla\String\StringHelper;
+use Joomla\Registry\Registry;
+use Crowdfunding\Payment;
+use Crowdfunding\Transaction\Transaction;
+use Crowdfunding\Transaction\TransactionManager;
+use Crowdfunding\Country\Country;
+use Prism\Payment\Result as PaymentResult;
+
 jimport('Prism.init');
 jimport('Crowdfunding.init');
-jimport('EmailTemplates.init');
-jimport('CrowdfundingFinance.init');
+jimport('Emailtemplates.init');
+jimport('Crowdfundingfinance.init');
+
+JObserverMapper::addObserverClassToClass(Crowdfunding\Observer\Transaction\TransactionObserver::class, Crowdfunding\Transaction\TransactionManager::class, array('typeAlias' => 'com_crowdfunding.payment'));
 
 /**
  * Crowdfunding PayPal Adaptive payment plugin.
@@ -21,7 +32,7 @@ jimport('CrowdfundingFinance.init');
  * @package      Crowdfunding
  * @subpackage   Plugins
  */
-class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
+class plgCrowdfundingPaymentPayPalAdaptive extends Payment\Plugin
 {
     protected $envelope = array(
         'errorLanguage' => 'en_US',
@@ -30,12 +41,10 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
 
     public function __construct(&$subject, $config = array())
     {
-        parent::__construct($subject, $config);
-
         $this->serviceProvider = 'PayPal Adaptive';
         $this->serviceAlias    = 'paypaladaptive';
-        $this->textPrefix     .= '_' . \JString::strtoupper($this->serviceAlias);
-        $this->debugType      .= '_' . \JString::strtoupper($this->serviceAlias);
+
+        parent::__construct($subject, $config);
     }
     
     /**
@@ -44,11 +53,11 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
      *
      * @param string                   $context This string gives information about that where it has been executed the trigger.
      * @param stdClass                   $item    A project data.
-     * @param Joomla\Registry\Registry $params  The parameters of the component
+     * @param Registry $params  The parameters of the component
      *
      * @return null|string
      */
-    public function onProjectPayment($context, &$item, &$params)
+    public function onProjectPayment($context, $item, $params)
     {
         if (strcmp('com_crowdfunding.payment', $context) !== 0) {
             return null;
@@ -86,10 +95,10 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
         $html[] = '<img alt="" border="0" width="1" height="1" src="https://www.paypal.com/en_US/i/scr/pixel.gif" />';
         $html[] = '</form>';
 
-        $html[] = '<p class="bg-info p-10-5"><span class="fa fa-info-circle"></span> ' . JText::_($this->textPrefix . '_INFO') . '</p>';
+        $html[] = '<p class="alert alert-info p-10-5"><span class="fa fa-info-circle"></span> ' . JText::_($this->textPrefix . '_INFO') . '</p>';
 
         if ($this->params->get('paypal_sandbox', 1)) {
-            $html[] = '<p class="bg-info p-10-5"><span class="fa fa-info-circle"></span> ' . JText::_($this->textPrefix . '_WORKS_SANDBOX') . '</p>';
+            $html[] = '<p class="alert alert-info p-10-5"><span class="fa fa-info-circle"></span> ' . JText::_($this->textPrefix . '_WORKS_SANDBOX') . '</p>';
         }
 
         $html[] = '</div>'; // Close "well".
@@ -102,11 +111,15 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
      *
      * @param string                   $context
      * @param stdClass                 $item
-     * @param Joomla\Registry\Registry $params
+     * @param Registry $params
      *
-     * @return null|array
+     * @throws \InvalidArgumentException
+     * @throws \RuntimeException
+     * @throws \UnexpectedValueException
+     *
+     * @return null|stdClass
      */
-    public function onPaymentsCheckout($context, &$item, &$params)
+    public function onPaymentsCheckout($context, $item, $params)
     {
         if (strcmp('com_crowdfunding.payments.checkout.'.$this->serviceAlias, $context) !== 0) {
             return null;
@@ -125,7 +138,7 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
             return null;
         }
 
-        $output = array();
+        $result    = new stdClass();
 
         $notifyUrl = $this->getCallbackUrl();
         $cancelUrl = $this->getCancelUrl($item->slug, $item->catslug);
@@ -139,19 +152,19 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
         // Get country and locale code.
         $countryId    = $this->params->get('paypal_country');
 
-        $country = new Crowdfunding\Country(JFactory::getDbo());
+        $country = new Country(JFactory::getDbo());
         $country->load($countryId);
 
         // Create transport object.
-        $options = new Joomla\Registry\Registry;
-        /** @var  $options Joomla\Registry\Registry */
+        $options = new Registry;
+        /** @var  $options Registry */
 
         $transport = new JHttpTransportCurl($options);
         $http      = new JHttp($options, $transport);
 
         // Create payment object.
-        $options = new Joomla\Registry\Registry;
-        /** @var  $options Joomla\Registry\Registry */
+        $options   = new Registry;
+        /** @var  $options Registry */
 
         $options->set('urls.cancel', $cancelUrl);
         $options->set('urls.return', $returnUrl);
@@ -194,10 +207,10 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
 
         // Get payment session.
 
-        $paymentSessionContext    = Crowdfunding\Constants::PAYMENT_SESSION_CONTEXT . $item->id;
+        $paymentSessionContext    = Crowdfunding\Constants::PAYMENT_SESSION_CONTEXT.$item->id;
         $paymentSessionLocal      = $this->app->getUserState($paymentSessionContext);
 
-        $paymentSession = $this->getPaymentSession(array(
+        $paymentSessionRemote = $this->getPaymentSession(array(
             'session_id'    => $paymentSessionLocal->session_id
         ));
 
@@ -221,17 +234,20 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
         }
 
         // Store token to the payment session.
-        $paymentSession->setUniqueKey($preapprovalKey);
-        $paymentSession->storeUniqueKey();
+        $paymentSessionRemote->setUniqueKey($preapprovalKey);
+        $paymentSessionRemote->setData('starting_date', $startingDate->format(DATE_ATOM));
+        $paymentSessionRemote->setData('ending_date', $endingDate->format(DATE_ATOM));
+
+        $paymentSessionRemote->store();
 
         // Get PayPal checkout URL.
         if (!$this->params->get('paypal_sandbox', 1)) {
-            $output['redirect_url'] = $this->params->get('paypal_url') . '?cmd=_ap-preapproval&preapprovalkey=' . rawurlencode($preapprovalKey);
+            $result->redirectUrl = $this->params->get('paypal_url') . '?cmd=_ap-preapproval&preapprovalkey=' . rawurlencode($preapprovalKey);
         } else {
-            $output['redirect_url'] = $this->params->get('paypal_sandbox_url') . '?cmd=_ap-preapproval&preapprovalkey=' . rawurlencode($preapprovalKey);
+            $result->redirectUrl = $this->params->get('paypal_sandbox_url') . '?cmd=_ap-preapproval&preapprovalkey=' . rawurlencode($preapprovalKey);
         }
 
-        return $output;
+        return $result;
     }
 
     /**
@@ -239,14 +255,16 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
      *
      * @param string                   $context
      * @param stdClass                 $item
-     * @param Joomla\Registry\Registry $params
+     * @param Registry $params
+     *
+     * @throws \InvalidArgumentException
+     * @throws \RuntimeException
+     * @throws \UnexpectedValueException
      *
      * @return array|null
      */
-    public function onPaymentsCapture($context, &$item, &$params)
+    public function onPaymentsCapture($context, $item, $params)
     {
-        JDEBUG ? $this->log->add('context', $this->debugType, $context) : null;
-
         $allowedContext = array('com_crowdfunding.payments.capture.'.$this->serviceAlias, 'com_crowdfundingfinance.payments.capture.'.$this->serviceAlias);
         if (!in_array($context, $allowedContext, true)) {
             return null;
@@ -276,19 +294,15 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
         JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_FEES'), $this->debugType, $fees) : null;
 
         // Create transport object.
-        $options = new Joomla\Registry\Registry;
-        /** @var  $options Joomla\Registry\Registry */
-
-        $transport = new JHttpTransportCurl($options);
-        $http      = new JHttp($options, $transport);
-
-        // Create payment object.
-        $options = new Joomla\Registry\Registry;
-        /** @var  $options Joomla\Registry\Registry */
+        $transport = new JHttpTransportCurl(new Registry);
+        $http      = new JHttp(new Registry, $transport);
 
         $notifyUrl = $this->getCallbackUrl();
         $cancelUrl = $this->getCancelUrl($project->getSlug(), $project->getCatSlug());
         $returnUrl = $this->getReturnUrl($project->getSlug(), $project->getCatSlug());
+
+        // Prepare payment options.
+        $options = new Registry;
 
         $options->set('urls.notify', $notifyUrl);
         $options->set('urls.cancel', $cancelUrl);
@@ -310,18 +324,16 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
         // Get API url.
         $apiUrl = $this->getApiUrl();
 
+        $fee = $this->calculateFee($fundingType, $fees, $item->txn_amount);
+
+        // Get receiver list and set it to service options.
+        $receiverList = $this->getReceiverList($item, $fee);
+        $options->set('payment.receiver_list', $receiverList);
+
+        // DEBUG DATA
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_DOCAPTURE_OPTIONS'), $this->debugType, $options) : null;
+
         try {
-
-            // Calculate the fee.
-            $fee = $this->calculateFee($fundingType, $fees, $item->txn_amount);
-
-            // Get receiver list and set it to service options.
-            $receiverList = $this->getReceiverList($item, $fee);
-            $options->set('payment.receiver_list', $receiverList);
-
-            // DEBUG DATA
-            JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_DOCAPTURE_OPTIONS'), $this->debugType, $options) : null;
-
             $adaptive = new Prism\Payment\PayPal\Adaptive($apiUrl, $options);
             $adaptive->setTransport($http);
 
@@ -332,10 +344,10 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
 
             // Include extra data to transaction record.
             if ($response->isSuccess()) {
-                $note = JText::_('PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_RESPONSE_NOTE_CAPTURE_PREAPPROVAL');
+                $note      = JText::_($this->textPrefix . '_RESPONSE_NOTE_CAPTURE_PREAPPROVAL');
                 $extraData = $this->prepareExtraData($response, $note);
 
-                $transaction = new Crowdfunding\Transaction(JFactory::getDbo());
+                $transaction = new Transaction(JFactory::getDbo());
                 $transaction->load($item->id);
 
                 $transaction->setFee($fee);
@@ -345,9 +357,7 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
                 // DEBUG DATA
                 JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_DOCAPTURE_TRANSACTION'), $this->debugType, $transaction->getProperties()) : null;
             }
-
         } catch (Exception $e) {
-
             // DEBUG DATA
             JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_ERROR_DOCAPTURE'), $this->debugType, $e->getMessage()) : null;
 
@@ -372,7 +382,9 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
      *
      * @param string                   $context
      * @param stdClass                 $item
-     * @param Joomla\Registry\Registry $params
+     * @param Registry $params
+     *
+     * @throws \RuntimeException
      *
      * @return array|null
      */
@@ -397,29 +409,23 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
         }
 
         // Create transport object.
-        $options = new Joomla\Registry\Registry;
-        /** @var  $options Joomla\Registry\Registry */
+        $transport = new JHttpTransportCurl(new Registry);
+        $http      = new JHttp(new Registry, $transport);
 
-        $transport = new JHttpTransportCurl($options);
-        $http      = new JHttp($options, $transport);
-
-        // Create payment object.
-        $options = new Joomla\Registry\Registry;
-        /** @var  $options Joomla\Registry\Registry */
+        // Prepare payment options.
+        $options   = new Registry;
+        $options->set('payment.preapproval_key', $item->txn_id);
+        $options->set('request.envelope', $this->envelope);
 
         $this->prepareCredentials($options);
 
-        $options->set('payment.preapproval_key', $item->txn_id);
-        $options->set('request.envelope', $this->envelope);
+        // DEBUG DATA
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_DOVOID_OPTIONS'), $this->debugType, $options) : null;
 
         // Get API url.
         $apiUrl = $this->getApiUrl();
 
         try {
-
-            // DEBUG DATA
-            JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_DOVOID_OPTIONS'), $this->debugType, $options) : null;
-
             $adaptive = new Prism\Payment\PayPal\Adaptive($apiUrl, $options);
             $adaptive->setTransport($http);
 
@@ -430,22 +436,20 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
 
             // Include extra data to transaction record.
             if ($response->isSuccess()) {
-                $note = JText::_('PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_RESPONSE_NOTE_CANCEL_PREAPPROVAL');
+                $note = JText::_($this->textPrefix.'_RESPONSE_NOTE_CANCEL_PREAPPROVAL');
                 $extraData = $this->prepareExtraData($response, $note);
 
-                $transaction = new Crowdfunding\Transaction(JFactory::getDbo());
+                $transaction = new Transaction(JFactory::getDbo());
                 $transaction->load($item->id);
 
                 $transaction->addExtraData($extraData);
                 $transaction->updateExtraData();
 
                 // DEBUG DATA
-                JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_DOVOID_TRANSACTION'), $this->debugType, $transaction->getProperties()) : null;
+                JDEBUG ? $this->log->add(JText::_($this->textPrefix.'_DEBUG_DOVOID_TRANSACTION'), $this->debugType, $transaction->getProperties()) : null;
             }
 
         } catch (Exception $e) {
-
-            // DEBUG DATA
             JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_ERROR_DOVOID'), $this->debugType, $e->getMessage()) : null;
 
             $message = array(
@@ -467,12 +471,17 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
     /**
      * This method processes transaction data that comes from PayPal instant notifier.
      *
-     * @param string                   $context This string gives information about that where it has been executed the trigger.
-     * @param Joomla\Registry\Registry $params  The parameters of the component
+     * @param string   $context This string gives information about that where it has been executed the trigger.
+     * @param Registry $params  The parameters of the component
      *
-     * @return null|array
+     * @throws \InvalidArgumentException
+     * @throws \RuntimeException
+     * @throws \UnexpectedValueException
+     * @throws \OutOfBoundsException
+     *
+     * @return null|PaymentResult
      */
-    public function onPaymentNotify($context, &$params)
+    public function onPaymentNotify($context, $params)
     {
         if (strcmp('com_crowdfunding.notify.'.$this->serviceAlias, $context) !== 0) {
             return null;
@@ -494,12 +503,7 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
         // Validate request method
         $requestMethod = $this->app->input->getMethod();
         if (strcmp('POST', $requestMethod) !== 0) {
-            $this->log->add(
-                JText::_($this->textPrefix . '_ERROR_INVALID_REQUEST_METHOD'),
-                $this->debugType,
-                JText::sprintf($this->textPrefix . '_ERROR_INVALID_TRANSACTION_REQUEST_METHOD', $requestMethod)
-            );
-
+            $this->log->add(JText::_($this->textPrefix . '_ERROR_INVALID_REQUEST_METHOD'), $this->debugType, JText::sprintf($this->textPrefix . '_ERROR_INVALID_TRANSACTION_REQUEST_METHOD', $requestMethod));
             return null;
         }
 
@@ -510,180 +514,151 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
             $url = $this->params->get('paypal_url', 'https://www.paypal.com/cgi-bin/webscr');
         }
 
-        $loadCertificate = (bool)$this->params->get('paypal_load_certificate', 0);
-
         // Prepare the array that will be returned by this method
-        $result = array(
-            'project'          => null,
-            'reward'           => null,
-            'transaction'      => null,
-            'payment_session'  => null,
-            'service_provider' => $this->serviceProvider,
-            'service_alias'    => $this->serviceAlias
-        );
+        $paymentResult                  = new PaymentResult;
+        $paymentResult->serviceProvider = $this->serviceProvider;
+        $paymentResult->serviceAlias    = $this->serviceAlias;
 
-        switch ($_POST['transaction_type']) {
-
+        $transactionType = ArrayHelper::getValue($_POST, 'transaction_type');
+        switch ($transactionType) {
             case 'Adaptive Payment PREAPPROVAL':
-                $result = $this->processPreApproval($result, $url, $loadCertificate, $params);
+                $this->processPreApproval($paymentResult, $url, $params);
                 break;
 
             case 'Adaptive Payment PAY':
-                $result = $this->processPay($result, $url, $loadCertificate, $params);
+                $this->processPay($url);
                 break;
 
             default:
-                $result = null;
+                $paymentResult = null;
                 break;
         }
 
-        return $result;
+        return $paymentResult;
     }
 
     /**
      * Process preapproval notification data from PayPal.
      *
-     * @param array $result
+     * @param PaymentResult $paymentResult
      * @param string $url  The parameters of the component
-     * @param bool $loadCertificate
-     * @param Joomla\Registry\Registry $params  The parameters of the component
+     * @param Registry $params  The parameters of the component
      *
-     * @return null|array
+     * @throws \InvalidArgumentException
+     * @throws \UnexpectedValueException
+     * @throws \RuntimeException
+     * @throws \OutOfBoundsException
+     *
+     * @return null
      */
-    protected function processPreApproval(&$result, $url, $loadCertificate, &$params)
+    protected function processPreApproval($paymentResult, $url, $params)
     {
-        $paypalIpn       = new Prism\Payment\PayPal\Ipn($url, $_POST);
+        $loadCertificate = (bool)$this->params->get('paypal_load_certificate', 0);
+
+        // DEBUG DATA
+        JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_RESPONSE'), $this->debugType, $_POST) : null;
+
+        $paypalIpn  = new Prism\Payment\PayPal\Ipn($url, $_POST);
         $paypalIpn->verify($loadCertificate);
 
         // DEBUG DATA
         JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_IPN_OBJECT'), $this->debugType, $paypalIpn) : null;
 
         if ($paypalIpn->isVerified()) {
+            $containerHelper  = new Crowdfunding\Container\Helper();
+            $currency         = $containerHelper->fetchCurrency($this->container, $params);
 
-            // Get currency
-            $currencyId = $params->get('project_currency');
-            $currency   = Crowdfunding\Currency::getInstance(JFactory::getDbo(), $currencyId);
-
-            $preApprovalKey = Joomla\Utilities\ArrayHelper::getValue($_POST, 'preapproval_key');
+            $preApprovalKey   = ArrayHelper::getValue($_POST, 'preapproval_key');
 
             // Get payment session data
             $keys = array(
                 'unique_key' => $preApprovalKey
             );
-            $paymentSession = $this->getPaymentSession($keys);
+            $paymentSessionRemote = $this->getPaymentSession($keys);
 
             // DEBUG DATA
-            JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_PAYMENT_SESSION'), $this->debugType, $paymentSession->getProperties()) : null;
+            JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_PAYMENT_SESSION'), $this->debugType, $paymentSessionRemote->getProperties()) : null;
 
             // Validate transaction data
-            $validData = $this->validateData($_POST, $currency->getCode(), $paymentSession);
+            $validData = $this->validateData($_POST, $currency->getCode(), $paymentSessionRemote);
             if ($validData === null) {
-                return $result;
+                return null;
             }
 
             // DEBUG DATA
             JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_VALID_DATA'), $this->debugType, $validData) : null;
 
-            // Get project.
-            $projectId = Joomla\Utilities\ArrayHelper::getValue($validData, 'project_id');
-            $project   = Crowdfunding\Project::getInstance(JFactory::getDbo(), $projectId);
-
-            // DEBUG DATA
-            JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_PROJECT_OBJECT'), $this->debugType, $project->getProperties()) : null;
-
+            // Get project and
+            $project = $containerHelper->fetchProject($this->container, $validData['project_id']);
+            
             // Check for valid project
             if (!$project->getId()) {
-
-                // Log data in the database
-                $this->log->add(
-                    JText::_($this->textPrefix . '_ERROR_INVALID_PROJECT'),
-                    $this->debugType,
-                    $validData
-                );
-
-                return $result;
+                $this->log->add(JText::_($this->textPrefix . '_ERROR_INVALID_PROJECT'), $this->debugType, $validData);
+                return null;
             }
 
+            // Set the receiver ID to transaction data.
+            $validData['receiver_id'] = $project->getUserId();
+
+            // Get reward object.
+            $reward = null;
+            if ($validData['reward_id']) {
+                $reward = $containerHelper->fetchReward($this->container, $validData['reward_id'], $project->getId());
+            }
+            
             // Set the receiver of funds
             $validData['receiver_id'] = $project->getUserId();
 
             // Save transaction data.
             // If it is not completed, return empty results.
             // If it is complete, continue with process transaction data
-            $transactionData = $this->storeTransaction($validData, $project, $preApprovalKey);
-            if ($transactionData == null) {
-                return $result;
+            $transaction = $this->storeTransaction($validData, $preApprovalKey, $paymentSessionRemote);
+            if ($transaction === null) {
+                return null;
             }
 
-            // Update the number of distributed reward.
-            $rewardId = Joomla\Utilities\ArrayHelper::getValue($transactionData, 'reward_id');
-            $reward   = null;
-            if ($rewardId > 0) {
-                $reward = $this->updateReward($transactionData);
+            $paymentResult->transaction = $transaction;
+            $paymentResult->project     = $project;
 
-                // Validate the reward.
-                if (!$reward) {
-                    $transactionData['reward_id'] = 0;
-                }
-            }
-
-
-            //  Prepare the data that will be returned
-
-            $result['transaction'] = Joomla\Utilities\ArrayHelper::toObject($transactionData);
-
-            // Generate object of data based on the project properties
-            $properties        = $project->getProperties();
-            $result['project'] = Joomla\Utilities\ArrayHelper::toObject($properties);
-
-            // Generate object of data based on the reward properties
             if ($reward !== null and ($reward instanceof Crowdfunding\Reward)) {
-                $properties       = $reward->getProperties();
-                $result['reward'] = Joomla\Utilities\ArrayHelper::toObject($properties);
+                $paymentResult->reward = $reward;
             }
+            
+            $paymentResult->paymentSession = $paymentSessionRemote;
 
-            // Generate data object, based on the payment session properties.
-            $properties       = $paymentSession->getProperties();
-            $result['payment_session'] = Joomla\Utilities\ArrayHelper::toObject($properties);
+            // Do not remove session records.
+            $paymentResult->triggerEvents['AfterPayment'] = false;
 
             // DEBUG DATA
-            JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_RESULT_DATA'), $this->debugType, $result) : null;
+            JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_RESULT_DATA'), $this->debugType, $paymentResult) : null;
 
-            // Remove payment session.
-            $txnStatus       = (isset($result['transaction']->txn_status)) ? $result['transaction']->txn_status : null;
-            $removeIntention = (bool)($txnStatus !== null and (strcmp($txnStatus, 'completed') === 0));
-            
-            $this->closePaymentSession($paymentSession, $removeIntention);
+            // Removing intention.
+            $this->removeIntention($paymentSessionRemote, $transaction);
 
         } else {
-
-            // Log error
             $this->log->add(
                 JText::_($this->textPrefix . '_ERROR_INVALID_TRANSACTION_DATA'),
                 $this->debugType,
                 array('error message' => $paypalIpn->getError(), 'paypalIPN' => $paypalIpn, '_POST' => $_POST)
             );
-
         }
-
-        return $result;
     }
 
     /**
     * Process PAY notification data from PayPal.
     * This method updates transaction record.
     *
-    * @param array $result
     * @param string $url  The parameters of the component
-    * @param bool $loadCertificate
-     * @param Joomla\Registry\Registry $params  The parameters of the component
     *
-    * @return null|array
+    * @throws \InvalidArgumentException
+    * @throws \RuntimeException
     */
-    protected function processPay(&$result, $url, $loadCertificate, &$params)
+    protected function processPay($url)
     {
+        $loadCertificate = (bool)$this->params->get('paypal_load_certificate', 0);
+
         // Get raw post data and parse it.
-        $rowPostString = file_get_contents('php://input');
+        $rowPostString   = file_get_contents('php://input');
 
         $rawPost = Prism\Utilities\StringHelper::parseNameValue($rowPostString);
 
@@ -697,9 +672,7 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
         // DEBUG DATA
         JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_IPN_OBJECT'), $this->debugType, $paypalIpn) : null;
 
-
         if ($paypalIpn->isVerified()) {
-
             // Parse raw post transaction data.
             $rawPostTransaction = $paypalIpn->getTransactionData();
             if (count($rawPostTransaction) !== 0) {
@@ -709,23 +682,18 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
             JDEBUG ? $this->log->add(JText::_('PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_DEBUG_FILTERED_RAW_POST'), $this->debugType, $_POST) : null;
             unset($rawPostTransaction, $rawPost);
 
-            $preApprovalKey = Joomla\Utilities\ArrayHelper::getValue($_POST, 'preapproval_key');
+            $preApprovalKey = ArrayHelper::getValue($_POST, 'preapproval_key');
 
             // Validate transaction data
             $this->updateTransactionDataOnPay($_POST, $preApprovalKey);
 
         } else {
-
-            // Log error
             $this->log->add(
                 JText::_($this->textPrefix . '_ERROR_INVALID_TRANSACTION_DATA'),
                 $this->debugType,
                 array('error message' => $paypalIpn->getError(), 'paypalIPN' => $paypalIpn, '_POST' => $_POST, 'RAW POST' => $rawPost)
             );
-
         }
-
-        return $result;
     }
 
     /**
@@ -735,6 +703,7 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
      * @param string $currency
      * @param Crowdfunding\Payment\Session $paymentSession
      *
+     * @throws \InvalidArgumentException
      * @return array|null
      */
     protected function validateData($data, $currency, $paymentSession)
@@ -748,13 +717,13 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
         $transaction = array(
             'investor_id'      => (int)$paymentSession->getUserId(),
             'project_id'       => (int)$paymentSession->getProjectId(),
-            'reward_id'        => ($paymentSession->isAnonymous()) ? 0 : (int)$paymentSession->getRewardId(),
+            'reward_id'        => $paymentSession->isAnonymous() ? 0 : (int)$paymentSession->getRewardId(),
             'service_provider' => $this->serviceProvider,
             'service_alias'    => $this->serviceAlias,
-            'txn_id'           => Joomla\Utilities\ArrayHelper::getValue($data, 'preapproval_key'),
+            'txn_id'           => ArrayHelper::getValue($data, 'preapproval_key'),
             'parent_txn_id'    => '',
-            'txn_amount'       => Joomla\Utilities\ArrayHelper::getValue($data, 'max_total_amount_of_all_payments', 0, 'float'),
-            'txn_currency'     => Joomla\Utilities\ArrayHelper::getValue($data, 'currency_code', '', 'string'),
+            'txn_amount'       => ArrayHelper::getValue($data, 'max_total_amount_of_all_payments', 0, 'float'),
+            'txn_currency'     => ArrayHelper::getValue($data, 'currency_code', '', 'string'),
             'txn_status'       => $this->getPaymentStatus($data),
             'txn_date'         => $date->toSql(),
             'status_reason'    => $this->getStatusReason($data),
@@ -763,28 +732,13 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
 
         // Check Project ID and Transaction ID
         if (!$transaction['project_id'] or !$transaction['txn_id']) {
-
-            // Log data in the database
-            $this->log->add(
-                JText::_($this->textPrefix . '_ERROR_INVALID_TRANSACTION_DATA'),
-                $this->debugType,
-                $transaction
-            );
-
+            $this->log->add(JText::_($this->textPrefix . '_ERROR_INVALID_TRANSACTION_DATA'), $this->debugType, $transaction);
             return null;
         }
-
-
+        
         // Check currency
         if (strcmp($transaction['txn_currency'], $currency) !== 0) {
-
-            // Log data in the database
-            $this->log->add(
-                JText::_($this->textPrefix . '_ERROR_INVALID_TRANSACTION_CURRENCY'),
-                $this->debugType,
-                array('TRANSACTION DATA' => $transaction, 'CURRENCY' => $currency)
-            );
-
+            $this->log->add(JText::_($this->textPrefix . '_ERROR_INVALID_TRANSACTION_CURRENCY'), $this->debugType, array('TRANSACTION DATA' => $transaction, 'CURRENCY' => $currency));
             return null;
         }
 
@@ -795,55 +749,76 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
     /**
      * Update transaction record using a data that comes for PayPal Adaptive PAY notifications.
      *
-     * @param array  $data
+     * @param array  $transactionData
      * @param string $preApprovalKey
      *
-     * @return array|null
+     * @throws \RuntimeException
      */
-    protected function updateTransactionDataOnPay($data, $preApprovalKey)
+    protected function updateTransactionDataOnPay($transactionData, $preApprovalKey)
     {
         // Get transaction by ID
         $keys = array(
             'txn_id' => $preApprovalKey
         );
 
-        $transaction = new Crowdfunding\Transaction(JFactory::getDbo());
+        $transaction = new Transaction(JFactory::getDbo());
         $transaction->load($keys);
 
-        $status = $this->getPaymentStatus($data);
-
-        // Process the status state.
-        switch ($status) {
-            case 'completed':
-                if (!$transaction->isCompleted()) {
-                    $transaction->setStatus($status);
-                    $transaction->setStatusReason('');
-                }
-                break;
-        }
-
         // Get additional information from transaction.
-        $extraData = $this->prepareNotificationExtraData($data, JText::_('PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_RESPONSE_NOTE_NOTIFICATION'));
+        $extraData = $this->prepareNotificationExtraData($transactionData, JText::_($this->textPrefix.'_RESPONSE_NOTE_NOTIFICATION'));
         if (count($extraData) !== 0) {
             $transaction->addExtraData($extraData);
         }
 
-        $transaction->store();
+        // Prepare the new status.
+        $newStatus = $this->getPaymentStatus($transactionData);
+
+        // IMPORTANT: It must be placed before ->bind();
+        $options = array(
+            'old_status' => $transaction->getStatus(),
+            'new_status' => $newStatus
+        );
+
+        $this->log->add(JText::_($this->textPrefix . '_DEBUG_TRANSACTION_STATUSES'), $this->debugType, $options);
+
+        // Set the status and reset status reason.
+        $transaction->setStatus($newStatus);
+        $transaction->setStatusReason('');
+
+        // Start database transaction.
+        $db = JFactory::getDbo();
+
+        try {
+            $db->transactionStart();
+
+            $transactionManager = new TransactionManager($db);
+            $transactionManager->setTransaction($transaction);
+            $transactionManager->process('com_crowdfunding.payment', $options);
+
+            $db->transactionCommit();
+        } catch (Exception $e) {
+            $db->transactionRollback();
+
+            $this->log->add(JText::_($this->textPrefix . '_ERROR_TRANSACTION_PROCESS'), $this->errorType, $e->getMessage());
+        }
     }
 
     /**
      * Save transaction data.
      *
-     * @param array               $transactionData
-     * @param Crowdfunding\Project $project
+     * @param array  $transactionData
      * @param string $preApprovalKey
+     * @param Crowdfunding\Payment\Session $paymentSessionRemote
      *
-     * @return null|array
+     * @throws \RuntimeException
+     * @throws \InvalidArgumentException
+     *
+     * @return null|Transaction
      */
-    protected function storeTransaction($transactionData, $project, $preApprovalKey)
+    protected function storeTransaction($transactionData, $preApprovalKey, $paymentSessionRemote)
     {
         // Get transaction by ID
-        $transaction = new Crowdfunding\Transaction(JFactory::getDbo());
+        $transaction = new Transaction(JFactory::getDbo());
         $transaction->load(array('txn_id' => $preApprovalKey));
 
         // DEBUG DATA
@@ -858,165 +833,184 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
                 return null;
             }
 
-            $txnStatus = Joomla\Utilities\ArrayHelper::getValue($transactionData, 'txn_status');
+            $txnStatus = ArrayHelper::getValue($transactionData, 'txn_status');
 
             switch ($txnStatus) {
-
                 case 'completed':
-                    $this->processCompleted($transaction, $project, $transactionData);
+                    $this->processCompleted($transaction, $transactionData);
                     break;
 
                 case 'canceled':
-                    $this->processVoided($transaction, $project, $transactionData);
+                    $this->processVoided($transaction, $transactionData);
                     break;
             }
 
             return null;
 
-        } else { // Create the new transaction data.
-
-            // Store the transaction data.
-            $transaction->bind($transactionData);
-            $transaction->store();
-
-            // Add funds to the project.
-            if ($transaction->isCompleted() or $transaction->isPending()) {
-                $amount = Joomla\Utilities\ArrayHelper::getValue($transactionData, 'txn_amount');
-                $project->addFunds($amount);
-                $project->storeFunds();
+        // Create new transaction record.
+        } else {
+            // Do not create new transaction record, if the payment process has been canceled on PayPal.
+            // NOTE: PayPal sends information about payment when the backer click on button "Cancel".
+            // It is not necessary to create transaction record when the payment has been canceled on PayPal.
+            if (strcmp($transactionData['txn_status'], Prism\Constants::PAYMENT_STATUS_CANCELED) === 0) {
+                return null;
             }
 
-            // Set transaction ID.
-            $transactionData['id'] = $transaction->getId();
+            // IMPORTANT: It must be placed before ->bind();
+            $options = array(
+                'old_status' => $transaction->getStatus(),
+                'new_status' => $transactionData['txn_status']
+            );
 
-            return $transactionData;
+            $this->log->add(JText::_($this->textPrefix . '_DEBUG_TRANSACTION_STATUSES'), $this->debugType, $options);
+            
+            // Create the new transaction record if there is not record.
+            // If there is new record, store new data with new status.
+            // Example: It has been 'pending' and now is 'completed'.
+            // Example2: It has been 'pending' and now is 'failed'.
+            $transaction->bind($transactionData);
+
+            $transaction->setParam('capture_period', [
+                'start' => $paymentSessionRemote->getData('starting_date'),
+                'end'   => $paymentSessionRemote->getData('ending_date')
+            ]);
+
+            // Start database transaction.
+            $db = JFactory::getDbo();
+
+            try {
+                $db->transactionStart();
+
+                $transactionManager = new TransactionManager($db);
+                $transactionManager->setTransaction($transaction);
+                $transactionManager->process('com_crowdfunding.payment', $options);
+                
+                $db->transactionCommit();
+            } catch (Exception $e) {
+                $db->transactionRollback();
+
+                $this->log->add(JText::_($this->textPrefix . '_ERROR_TRANSACTION_PROCESS'), $this->errorType, $e->getMessage());
+                return null;
+            }
+
+            return $transaction;
         }
-
     }
 
     /**
-     * @param Crowdfunding\Transaction $transaction
-     * @param Crowdfunding\Project     $project
-     * @param array                   $data
+     * @param Transaction $transaction
+     * @param array  $transactionData
      *
-     * @return bool
+     * @throws \RuntimeException
      */
-    protected function processCompleted(&$transaction, &$project, &$data)
+    protected function processCompleted($transaction, $transactionData)
     {
-        // Set a flag that shows the project is NOT funded.
-        // If the status had not been completed or pending ( it might be failed, voided, created,...),
-        // the project funds had not been increased. So, I will set this flag to false.
-        $projectFunded = true;
-        if (!$transaction->isCompleted() and !$transaction->isPending()) {
-            $projectFunded = false;
-        }
-
         // Merge existed extra data with the new one.
         if (!empty($data['extra_data'])) {
             $transaction->addExtraData($data['extra_data']);
             unset($data['extra_data']);
         }
 
+        // IMPORTANT: It must be placed before ->bind();
+        $options = array(
+            'old_status' => $transaction->getStatus(),
+            'new_status' => Prism\Constants::PAYMENT_STATUS_COMPLETED
+        );
+
+        $this->log->add(JText::_($this->textPrefix . '_DEBUG_TRANSACTION_STATUSES'), $this->debugType, $options);
+
+        // Create the new transaction record if there is not record.
+        // If there is new record, store new data with new status.
+        // Example: It has been 'pending' and now is 'completed'.
+        // Example2: It has been 'pending' and now is 'failed'.
+        $transaction->bind($transactionData);
+
         // Remove the status reason.
         if ($transaction->isCompleted()) {
-            $data['pending_reason'] = '';
+            $transaction->setStatusReason('');
         }
 
-        // Update the transaction data.
-        $transaction->bind($data);
-        $transaction->store();
+        // Start database transaction.
+        $db = JFactory::getDbo();
 
-        // If the transaction status has been changed to pending or completed,
-        // I have to add funds to the project.
-        if (!$projectFunded and ($transaction->isCompleted() or $transaction->isPending())) {
-            $amount = Joomla\Utilities\ArrayHelper::getValue($data, 'txn_amount');
-            $project->addFunds($amount);
-            $project->storeFunds();
+        try {
+            $db->transactionStart();
+
+            $transactionManager = new TransactionManager($db);
+            $transactionManager->setTransaction($transaction);
+            $transactionManager->process('com_crowdfunding.payment', $options);
+
+            $db->transactionCommit();
+        } catch (Exception $e) {
+            $db->transactionRollback();
+
+            $this->log->add(JText::_($this->textPrefix . '_ERROR_TRANSACTION_PROCESS'), $this->errorType, $e->getMessage());
         }
-
-        return true;
     }
 
     /**
-     * @param Crowdfunding\Transaction $transaction
-     * @param Crowdfunding\Project     $project
-     * @param array                   $data
+     * @param Transaction $transaction
+     * @param array  $transactionData
      *
-     * @return bool
+     * @throws \RuntimeException
      */
-    protected function processVoided(&$transaction, &$project, &$data)
+    protected function processVoided($transaction, $transactionData)
     {
         // It is possible only to void a transaction with status "pending".
         if (!$transaction->isPending()) {
             return;
         }
 
-        // Merge existed extra data with the new one.
-        if (!empty($data['extra_data'])) {
-            $transaction->addExtraData($data['extra_data']);
-            unset($data['extra_data']);
-        }
+        // IMPORTANT: It must be placed before ->bind();
+        $options = array(
+            'old_status' => $transaction->getStatus(),
+            'new_status' => Prism\Constants::PAYMENT_STATUS_CANCELED
+        );
+
+        $this->log->add(JText::_($this->textPrefix . '_DEBUG_TRANSACTION_STATUSES'), $this->debugType, $options);
+
+        // Create the new transaction record if there is not record.
+        // If there is new record, store new data with new status.
+        // Example: It has been 'pending' and now is 'completed'.
+        // Example2: It has been 'pending' and now is 'failed'.
+        $transaction->bind($transactionData);
 
         // Remove the status reason.
-        $data['status_reason'] = '';
+        $transaction->setStatusReason('');
 
-        // Update the transaction data.
-        // If the current status is pending and the new status is completed,
-        // only store the transaction data, updating the status to completed.
-        $transaction->bind($data);
-        $transaction->store();
+        // Start database transaction.
+        $db = JFactory::getDbo();
 
-        $amount = Joomla\Utilities\ArrayHelper::getValue($data, 'txn_amount');
-        $project->removeFunds($amount);
-        $project->storeFunds();
-    }
+        try {
+            $db->transactionStart();
 
-    /**
-     * Create and return transaction object.
-     *
-     * @param array $data
-     *
-     * @return Crowdfunding\Transaction
-     */
-    protected function getTransaction($data)
-    {
-        $transactionType = Joomla\Utilities\ArrayHelper::getValue($data, "transaction_type");
+            $transactionManager = new TransactionManager($db);
+            $transactionManager->setTransaction($transaction);
+            $transactionManager->process('com_crowdfunding.payment', $options);
 
-        // Prepare keys used for getting transaction from DB.
-        if (strcmp($transactionType, 'Adaptive Payment PREAPPROVAL') === 0) {
-            $keys['txn_id'] = Joomla\Utilities\ArrayHelper::getValue($data, 'preapproval_key');
-        } elseif (strcmp($transactionType, 'Adaptive Payment PAY') === 0) {
-            $keys['txn_id'] = Joomla\Utilities\ArrayHelper::getValue($data, 'preapproval_key');
-        } else {
-            $keys = array();
+            $db->transactionCommit();
+        } catch (Exception $e) {
+            $db->transactionRollback();
+
+            $this->log->add(JText::_($this->textPrefix . '_ERROR_TRANSACTION_PROCESS'), $this->errorType, $e->getMessage());
         }
-
-        // DEBUG DATA
-        JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_TRANSACTION_KEYS'), $this->debugType, $keys) : null;
-
-        // Get transaction by ID
-        $transaction = new Crowdfunding\Transaction(JFactory::getDbo());
-        $transaction->load($keys);
-
-        return $transaction;
     }
 
     protected function prepareLocale(&$html)
     {
         // Get country
         $countryId = $this->params->get('paypal_country');
-        $country   = new Crowdfunding\Country(JFactory::getDbo());
+        $country   = new Country(JFactory::getDbo());
         $country->load($countryId);
 
         $code  = $country->getCode();
-        $code4 = $country->getCode4();
+        $code4 = $country->getLocale();
 
         $button    = $this->params->get('paypal_button_type', 'btn_buynow_LG');
         $buttonUrl = $this->params->get('paypal_button_url');
 
         // Generate a button
         if (!$this->params->get('paypal_button_default', 0)) {
-
             if (!$buttonUrl) {
                 if (strcmp('US', $code) === 0) {
                     $html[] = '<input type="image" name="submit" border="0" src="https://www.paypalobjects.com/' . $code4 . '/i/btn/' . $button . '.gif" alt="' . JText::_($this->textPrefix . '_BUTTON_ALT') . '" />';
@@ -1039,7 +1033,7 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
     {
         $result = '';
 
-        $transactionType = Joomla\Utilities\ArrayHelper::getValue($data, 'transaction_type');
+        $transactionType = ArrayHelper::getValue($data, 'transaction_type');
 
         if (strcmp($transactionType, 'Adaptive Payment PREAPPROVAL') === 0) {
             $result = 'preapproval';
@@ -1052,14 +1046,13 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
     {
         $result = 'pending';
 
-        $transactionType = Joomla\Utilities\ArrayHelper::getValue($data, 'transaction_type');
-        $status = Joomla\Utilities\ArrayHelper::getValue($data, 'status');
+        $transactionType = ArrayHelper::getValue($data, 'transaction_type');
+        $status = ArrayHelper::getValue($data, 'status');
 
         if (strcmp($transactionType, 'Adaptive Payment PREAPPROVAL') === 0) {
-
             switch ($status) {
                 case 'ACTIVE':
-                    $approved = Joomla\Utilities\ArrayHelper::getValue($data, 'approved', false, 'bool');
+                    $approved = ArrayHelper::getValue($data, 'approved', false, 'bool');
                     if ($approved) {
                         $result = 'pending';
                     }
@@ -1072,7 +1065,6 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
             }
 
         } elseif (strcmp($transactionType, 'Adaptive Payment PAY') === 0) {
-
             switch ($status) {
                 case 'COMPLETED':
                     $result = 'completed';
@@ -1154,20 +1146,20 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
     /**
      * Prepare credentials for sandbox or for the live server.
      *
-     * @param Joomla\Registry\Registry $options
+     * @param Registry $options
      */
-    protected function prepareCredentials(&$options)
+    protected function prepareCredentials(Registry $options)
     {
         if ($this->params->get('paypal_sandbox', 1)) {
-            $options->set('credentials.username', JString::trim($this->params->get('paypal_sandbox_api_username')));
-            $options->set('credentials.password', JString::trim($this->params->get('paypal_sandbox_api_password')));
-            $options->set('credentials.signature', JString::trim($this->params->get('paypal_sandbox_api_signature')));
-            $options->set('credentials.app_id', JString::trim($this->params->get('paypal_sandbox_app_id')));
+            $options->set('credentials.username', StringHelper::trim($this->params->get('paypal_sandbox_api_username')));
+            $options->set('credentials.password', StringHelper::trim($this->params->get('paypal_sandbox_api_password')));
+            $options->set('credentials.signature', StringHelper::trim($this->params->get('paypal_sandbox_api_signature')));
+            $options->set('credentials.app_id', StringHelper::trim($this->params->get('paypal_sandbox_app_id')));
         } else {
-            $options->set('credentials.username', JString::trim($this->params->get('paypal_api_username')));
-            $options->set('credentials.password', JString::trim($this->params->get('paypal_api_password')));
-            $options->set('credentials.signature', JString::trim($this->params->get('paypal_api_signature')));
-            $options->set('credentials.app_id', JString::trim($this->params->get('paypal_app_id')));
+            $options->set('credentials.username', StringHelper::trim($this->params->get('paypal_api_username')));
+            $options->set('credentials.password', StringHelper::trim($this->params->get('paypal_api_password')));
+            $options->set('credentials.signature', StringHelper::trim($this->params->get('paypal_api_signature')));
+            $options->set('credentials.app_id', StringHelper::trim($this->params->get('paypal_app_id')));
         }
     }
 
@@ -1206,20 +1198,16 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
         // the user must provide us his PayPal account.
         // He must provide us an email using Crowdfunding Finance.
         if (in_array($paymentType, $feesPaymentTypes, true)) {
-            jimport('CrowdfundingFinance.Payout');
-            $payout = new CrowdfundingFinance\Payout(JFactory::getDbo());
-            $payout->load($item->project_id);
+            $payout = new Crowdfundingfinance\Payout(JFactory::getDbo());
+            $payout->load(['project_id' => $item->project_id], ['secret_key' => $this->app->get('secret')]);
 
             // DEBUG DATA
             JDEBUG ? $this->log->add(JText::_($this->textPrefix . '_DEBUG_PAYOUT_DATA'), $this->debugType, $payout->getProperties()) : null;
 
             $receiverEmail = $payout->getPaypalEmail();
-            if ($receiverEmail !== null and $receiverEmail !== '') {
-
-                switch($paymentType) {
-
+            if ($receiverEmail !== '') {
+                switch ($paymentType) {
                     case 'chained':
-
                         // Set the amount that the project owner will receive.
                         $projectOwnerAmount = $siteOwnerAmount;
 
@@ -1236,7 +1224,6 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
                         break;
 
                     case 'parallel':
-
                         // Set the amount that the project owner will receive.
                         $projectOwnerAmount = $siteOwnerAmount - $fee;
 
@@ -1251,15 +1238,13 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
 
                         break;
                 }
-
             }
-
         }
 
         // If the payment type is parallel or chained,
         // the user must provide himself as receiver.
         // If receiver missing, return an empty array.
-        if (in_array($paymentType, $feesPaymentTypes, true) and count($receiverList) > 0) {
+        if (in_array($paymentType, $feesPaymentTypes, true) and count($receiverList) === 0) {
             throw new RuntimeException(JText::_($this->textPrefix . '_ERROR_INVALID_FIRST_RECEIVER'));
         }
 
@@ -1272,21 +1257,17 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
         }
 
         if ($this->params->get('paypal_sandbox', 1)) { // Simple
-
             $receiverList['receiver'][] = array(
-                'email'   => JString::trim($this->params->get('paypal_sandbox_receiver_email')),
+                'email'   => StringHelper::trim($this->params->get('paypal_sandbox_receiver_email')),
                 'amount'  => round($siteOwnerAmount, 2),
                 'primary' => false
             );
-
         } else {
-
             $receiverList['receiver'][] = array(
-                'email'   => JString::trim($this->params->get('paypal_receiver_email')),
+                'email'   => StringHelper::trim($this->params->get('paypal_receiver_email')),
                 'amount'  => round($siteOwnerAmount, 2),
                 'primary' => false
             );
-
         }
 
         return $receiverList;
@@ -1300,9 +1281,9 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
     protected function getApiUrl()
     {
         if ($this->params->get('paypal_sandbox', 1)) {
-            return JString::trim($this->params->get('paypal_sandbox_api_url'));
+            return StringHelper::trim($this->params->get('paypal_sandbox_api_url'));
         } else {
-            return JString::trim($this->params->get('paypal_api_url'));
+            return StringHelper::trim($this->params->get('paypal_api_url'));
         }
     }
 
@@ -1321,14 +1302,15 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Crowdfunding\Payment\Plugin
 
         foreach ($data as $key => $value) {
             $key = $filter->clean($key);
-            if (!is_array($value)) {
-                $result[$key] = $filter->clean($value);
-            } else {
+            if (is_array($value)) {
+                /** @var array $value */
                 foreach ($value as $k => $v) {
                     $value[$k] = $filter->clean($v);
                 }
 
                 $result[$key] = $value;
+            } else {
+                $result[$key] = $filter->clean($value);
             }
         }
 

@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<extension version="3.4" type="plugin" group="crowdfundingpayment" method="upgrade">
+<extension version="3.6" type="plugin" group="crowdfundingpayment" method="upgrade">
     <name>PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE</name>
     <author>Todor Iliev</author>
-    <copyright>Copyright (C) 2015 Todor Iliev ( ITPrism.com ). All rights reserved.</copyright>
+    <copyright>Copyright (C) 2017 Todor Iliev ( ITPrism.com ). All rights reserved.</copyright>
     <license>http://www.gnu.org/licenses/gpl-3.0.en.html GNU/GPLv3</license>
     <authorEmail>todor@itprism.com</authorEmail>
     <authorUrl>http://itprism.com</authorUrl>
-    <version>2.1</version>
-    <creationDate>13 November, 2015</creationDate>
+    <version>2.2</version>
+    <creationDate>23 February, 2017</creationDate>
     <description><![CDATA[
     <p>Crowdfunding Payment - PayPal Adaptive is a plugin that provides ability for making payments via PayPal Adaptive method.</p>
     <p><a href='http://itprism.com/' target='_blank'>Subscribe for the newsletter</a> to receive information about updates and new ITPrism extensions.</p>
@@ -98,7 +98,10 @@
                     <option value="SENDER">PLG_CROWDFUNDINGPAYMENT_PAYPALADAPTIVE_SENDER</option>
                 </field>
 			</fieldset>
-	            
         </fields>
 	</config>
+
+    <updateservers>
+        <server type="extension" priority="1" name="CrowdfundingPayment - PayPal Adaptive">http://cdn.itprism.com/updates/crowdfunding/plugins/plg_crowdfundingpayment_paypaladaptive.xml</server>
+    </updateservers>
 </extension>
