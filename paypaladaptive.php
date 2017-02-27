@@ -83,7 +83,7 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Payment\Plugin
         $html[] = '<div class="well">'; // Open "well".
 
         $html[] = '<h4><img src="' . $pluginURI . '/images/paypal_icon.png" width="36" height="32" alt="PayPal" />' . JText::_($this->textPrefix . '_TITLE') . '</h4>';
-        $html[] = '<form action="' . JRoute::_('index.php?option=com_crowdfunding') . '" method="post">';
+        $html[] = '<form action="/index.php?option=com_crowdfunding" method="post">';
 
         $html[] = '<input type="hidden" name="task" value="payments.checkout" />';
         $html[] = '<input type="hidden" name="payment_service" value="'.$this->serviceAlias.'" />';
@@ -109,15 +109,15 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Payment\Plugin
     /**
      * Process payment transaction.
      *
-     * @param string                   $context
-     * @param stdClass                 $item
+     * @param string   $context
+     * @param stdClass $item
      * @param Registry $params
      *
      * @throws \InvalidArgumentException
      * @throws \RuntimeException
      * @throws \UnexpectedValueException
      *
-     * @return null|stdClass
+     * @return null|PaymentResult
      */
     public function onPaymentsCheckout($context, $item, $params)
     {
@@ -138,7 +138,8 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Payment\Plugin
             return null;
         }
 
-        $result    = new stdClass();
+        $result    = new PaymentResult();
+        $result->triggerEvents = array();
 
         $notifyUrl = $this->getCallbackUrl();
         $cancelUrl = $this->getCancelUrl($item->slug, $item->catslug);
@@ -1172,7 +1173,7 @@ class plgCrowdfundingPaymentPayPalAdaptive extends Payment\Plugin
      * @return array
      * @throws RuntimeException
      */
-    public function getReceiverList(&$item, $fee)
+    public function getReceiverList($item, $fee)
     {
         $receiverList = array();
 
